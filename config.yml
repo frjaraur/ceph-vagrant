@@ -1,0 +1,40 @@
+environment:
+  domain: "dockerlab.local"
+  manager_ip: "10.10.10.11"
+  base_box: "frjaraur/xenial64"
+
+boxes:
+- name: "cephadm"
+  ceph_role: "manager"
+  mgmt_ip: "10.10.10.10"
+  hostonly_ip: "192.168.56.10"
+  mem: "1524"
+  cpu: "1"
+
+- name: "ceph1"
+  ceph_role: "datanode"
+  mgmt_ip: "10.10.10.11"
+  hostonly_ip: "192.168.56.11"
+  mem: "1524"
+  cpu: "1"
+
+- name: "ceph2"
+  ceph_role: "datanode"
+  mgmt_ip: "10.10.10.12"
+  hostonly_ip: "192.168.56.12"
+  mem: "1524"
+  cpu: "1"
+
+- name: "ceph3"
+  ceph_role: "datanode"
+  mgmt_ip: "10.10.10.13"
+  hostonly_ip: "192.168.56.13"
+  mem: "1524"
+  cpu: "1"
+  
+- name: "ceph4"
+  ceph_role: "datanode"
+  mgmt_ip: "10.10.10.14"
+  hostonly_ip: "192.168.56.14"
+  mem: "1524"
+  cpu: "1"
