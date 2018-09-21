@@ -17,50 +17,24 @@ config = YAML.load_file(File.join(File.dirname(__FILE__), 'config.yml'))
 
 base_box=config['environment']['base_box']
 
+base_box_version=config['environment']['base_box_version']
 
-
-
-
-manager_ip=config['environment']['manager_ip']
+manager=config['environment']['manager']
 
 domain=config['environment']['domain']
 
 boxes = config['boxes']
 
 boxes_hostsfile_entries=""
-
-# Configuration 
-$rexray_cfg = "/etc/rexray/config.yml"
-$volume_path = "#{File.dirname(__FILE__)}/.vagrant/volumes"
-FileUtils::mkdir_p $volume_path
-#$write_rexray_config_manager = <<SCRIPT
-# 10.0.2.2 is the virtual ip for virtualbox host using vagrant
-$write_rexray_config = <<SCRIPT
-mkdir -p #{File.dirname($rexray_cfg).shellescape}
-cat << EOF > #{$rexray_cfg.shellescape}
-rexray:
-  logLevel: warn
-libstorage:
-  service: virtualbox
-  integration:
-    volume:
-      operations:
-        mount:
-          preempt: true
-virtualbox:
-  volumePath: #{$volume_path}
-  endpoint: http://10.0.2.2:18083
-  controllerName: SATA
-EOF
-SCRIPT
-
-########
-
 boxes.each do |box|
   boxes_hostsfile_entries=boxes_hostsfile_entries+box['mgmt_ip'] + ' ' +  box['name'] + ' ' + box['name']+'.'+domain+'\n'
 end
 
-#puts boxes_hostsfile_entries
+nodes=""
+boxes.each do |box|
+	nodes=nodes+ box['name'] + ' '
+end
+
 
 update_hosts = <<SCRIPT
     echo "127.0.0.1 localhost" >/etc/hosts
@@ -76,7 +50,7 @@ SCRIPT
 $create_cephadm_user = <<SCRIPT
     useradd -d /home/cephadm -m cephadm -s /bin/bash
     echo "cephadm:changeme"|chpasswd
-    echo "cephadm ALL = (root) NOPASSWD:ALL" >>/etc/sudoers
+    echo "cephadm ALL = (root) NOPASSWD:ALL" >>/etc/sudoers.d/cephadm
     [ ! -f /tmp_deploying_stage/id_rsa ] && ssh-keygen  -t rsa -P "" -f /tmp_deploying_stage/id_rsa
     mkdir -p /home/cephadm/.ssh &&  cp /tmp_deploying_stage/id_rsa* /home/cephadm/.ssh/
     cat /home/cephadm/.ssh/id_rsa.pub > /home/cephadm/.ssh/authorized_keys
@@ -99,9 +73,11 @@ Vagrant.configure(2) do |config|
     end
   end
   config.vm.box = base_box
+  config.vm.box_version = base_box_version
+
 
   config.vm.synced_folder "tmp_deploying_stage/", "/tmp_deploying_stage",create:true
-  #config.vm.synced_folder "src/", "/src",create:true
+
   boxes.each do |node|
     config.vm.define node['name'] do |config|
       config.vm.hostname = node['name']
@@ -110,8 +86,7 @@ Vagrant.configure(2) do |config|
         v.name = node['name']
         v.customize ["modifyvm", :id, "--memory", node['mem']]
         v.customize ["modifyvm", :id, "--cpus", node['cpu']]
-
-	    v.customize ["modifyvm", :id, "--macaddress1", "auto"]
+   	    v.customize ["modifyvm", :id, "--macaddress1", "auto"]
 
         v.customize ["modifyvm", :id, "--nictype1", "Am79C973"]
         v.customize ["modifyvm", :id, "--nictype2", "Am79C973"]
@@ -125,30 +100,32 @@ Vagrant.configure(2) do |config|
         unless File.exist?(file_to_disk)
             v.customize ['createhd', '--filename', file_to_disk, '--size', 500 * 1024]
         end
-        #v.customize ['storageattach', :id, '--storagectl', 'SATA Controller', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', file_to_disk]
         v.customize ['storageattach', :id, '--storagectl', 'SATA', '--port', 1, '--device', 0, '--type', 'hdd', '--medium', file_to_disk]
 
       end
 
       config.vm.network "private_network",
-      ip: node['mgmt_ip'],
-      virtualbox__intnet: "CEPH"
-
-
-      #config.vm.network "forwarded_port", guest: 8080, host: 8080, auto_correct: true
-
-      config.vm.network "public_network",
-      bridge: ["enp4s0","wlp3s0","enp3s0f1","wlp2s0"],
-      auto_config: true
+      ip: node['mgmt_ip'],:netmask => "255.255.255.0",
+      virtualbox__intnet: false,
+      hostonlyadapter: ["vboxnet1"]
 
 
       config.vm.provision "shell", inline: <<-SHELL
-        apt-get update -qq && apt-get install -qq chrony curl && timedatectl set-timezone Europe/Madrid
-        rpl "allow 1" "#allow 1" /etc/chrony/chrony.conf
-        systemctl restart chrony
+        systemctl stop apt-daily.timer
+        systemctl disable apt-daily.timer
+        sed -i '/Update-Package-Lists/ s/1/0/' /etc/apt/apt.conf.d/10periodic
+        while true;do fuser -vki /var/lib/apt/lists/lock || break ;done
+        apt-get update -qq && apt-get install -qq ntpdate ntp && timedatectl set-timezone Europe/Madrid
       SHELL
 
+
       config.vm.provision :shell, :inline => update_hosts
+
+      config.vm.provision "shell", inline: <<-SHELL
+        apt-get install -y python python-pip parted
+        parted -s /dev/sdb mklabel gpt mkpart primary xfs 0% 100%
+        mkfs.xfs -f /dev/sdb
+      SHELL
 
       config.vm.provision "shell" do |s|
        			s.name       = "Install Ceph Repo"
@@ -162,15 +139,10 @@ Vagrant.configure(2) do |config|
 
       config.vm.provision :shell, :inline => update_global_ssh_config
 
-        #config.vm.provision "shell" do |s|
-        #  s.name   = "Start rex-ray"
-        #  s.inline = "sudo systemctl start rexray"
-        #end
+      config.vm.provision :shell,
+	path: "./setup.sh",
+	args: manager + ' ' + nodes
 
-        #config.vm.provision "shell" do |s|
-        #  s.name   = "Restart Docker Engine"
-        #  s.inline = "sudo systemctl restart docker"
-        #end
 
     end
   end
