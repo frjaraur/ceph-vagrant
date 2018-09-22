@@ -1,3 +1,5 @@
+## On node ceph-adm as cephadm
+~~~
 mkdir cluster
 cd cluster/
 
@@ -46,13 +48,31 @@ ceph-osd1 \
 ceph-osd2 \
 ceph-osd3
 
-# On All Nodes
-sudo chmod 644 /etc/ceph/ceph.client.admin.keyring
+~~~
 
-# From ceph-mon
+### On All Nodes
+~~~
+sudo chmod 644 /etc/ceph/ceph.client.admin.keyring
+(We can use ssh <node> sudo chmod 644 /etc/ceph/ceph.client.admin.keyring)
+~~~
+
+
+### On ceph-mon
+~~~
 sudo ceph health
 
 sudo ceph -s
 ceph
 >health
 
+~~~
+
+### Testing
+~~~
+echo "This a TEST" >testfile.txt
+ceph osd pool create mytest 8
+rados put testfile $(pwd)/testfile.txt --pool=mytest
+rados -p mytest ls
+ceph osd map mytest testfile
+
+~~~
