@@ -48,3 +48,11 @@ ceph-osd3
 
 # On All Nodes
 sudo chmod 644 /etc/ceph/ceph.client.admin.keyring
+
+# From ceph-mon
+sudo ceph health
+
+sudo ceph -s
+ceph
+>health
+
