@@ -1,2 +1,4 @@
 .vagrant/
 .vscode*
+tmp_deploying_stage/
+tmp_disks/
